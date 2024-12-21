@@ -10,3 +10,6 @@ Questo progetto implementa un sistema wearable per il rilevamento di cadute, pen
 
 Il sistema rileva una possibile caduta analizzando i dati del sensore e confrontandoli con soglie predefinite. In caso di caduta, l'app invia una notifica al bot Telegram, che a sua volta informa un contatto fidato, permettendo un intervento tempestivo.
 
+## Riferimenti
+
+- Wang FT, Chan HL, Hsu MH, Lin CK, Chao PK, Chang YJ. Threshold-based fall detection using a hybrid of tri-axial accelerometer and gyroscope. Physiol Meas. 2018 Oct 11;39(10):105002. doi: 10.1088/1361-6579/aae0eb. PMID: 30207983. (https://pubmed.ncbi.nlm.nih.gov/30207983/)
