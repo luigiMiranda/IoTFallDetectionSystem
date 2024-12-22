@@ -1,11 +1,11 @@
 
 # Sistema di Rilevamento Cadute con Arduino Nano 33 BLE e App Flutter
 ## Table of Contents
-* [General info](#general-info)
+* [Descrizione progetto](#descrizione)
 * [Tecnologie](#tecnologie)
 * [Componenti hardware](#hardware)
 * [Setup](#setup)
-## General info
+## Descrizione progetto
 Questo progetto implementa un sistema wearable per il rilevamento di cadute, pensato principalmente per persone anziane sopra i 65 anni. Il sistema sfrutta:
 
 - Arduino Nano 33 BLE con sensori integrati di accelerometro e giroscopio per rilevare i movimenti del corpo.
