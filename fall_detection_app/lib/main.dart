@@ -172,21 +172,23 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
   Future<void> _showFallAlert() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('telegram_token');
-    final chatId = prefs.getString('telegram_chat_id');
+    final chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
 
-    if (token != null && chatId != null) {
-      try {
-        final response = await http.get(
-          Uri.parse(
-              'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=ATTENZIONE: È stata rilevata una possibile caduta!'
-          ),
-        );
+    if (token != null && chatIds.isNotEmpty) {
+      for (String chatId in chatIds) {
+        try {
+          final response = await http.get(
+            Uri.parse(
+                'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=ATTENZIONE: È stata rilevata una possibile caduta!'
+            ),
+          );
 
-        if (response.statusCode != 200) {
-          print('Errore nell\'invio del messaggio Telegram: ${response.body}');
+          if (response.statusCode != 200) {
+            print('Errore nell\'invio del messaggio Telegram a $chatId: ${response.body}');
+          }
+        } catch (e) {
+          print('Errore nella comunicazione con Telegram per $chatId: $e');
         }
-      } catch (e) {
-        print('Errore nella comunicazione con Telegram: $e');
       }
     }
 
@@ -208,7 +210,6 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
       },
     );
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -330,14 +331,15 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _tokenController;
-  late TextEditingController _chatIdController;
+  late TextEditingController _newChatIdController;
+  List<String> _chatIds = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tokenController = TextEditingController();
-    _chatIdController = TextEditingController();
+    _newChatIdController = TextEditingController();
     _loadSettings();
   }
 
@@ -345,7 +347,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _tokenController.text = prefs.getString('telegram_token') ?? '';
-      _chatIdController.text = prefs.getString('telegram_chat_id') ?? '';
+      _chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
       _isLoading = false;
     });
   }
@@ -356,7 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('telegram_token', _tokenController.text);
-      await prefs.setString('telegram_chat_id', _chatIdController.text);
+      await prefs.setStringList('telegram_chat_ids', _chatIds);
 
       setState(() => _isLoading = false);
 
@@ -369,27 +371,95 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _verifyConnectionWithBot() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('telegram_token');
-    final chatId = prefs.getString('telegram_chat_id');
+  void _addChatId() {
+    if (_newChatIdController.text.isNotEmpty &&
+        !_chatIds.contains(_newChatIdController.text)) {
+      setState(() {
+        _chatIds.add(_newChatIdController.text);
+        _newChatIdController.clear();
+      });
+    }
+  }
 
-    if (token != null && chatId != null) {
+  void _removeChatId(String chatId) {
+    setState(() {
+      _chatIds.remove(chatId);
+    });
+  }
+
+  Widget _buildInstructions() {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8.0),
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Come ottenere il tuo Chat ID:',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '1. Cerca il bot su Telegram usando il nome del tuo bot\n'
+                  '2. Avvia il bot cliccando Start o inviando /start\n'
+                  '3. Invia il comando /getchatid\n'
+                  '4. Il bot risponderà con il tuo Chat ID\n'
+                  '5. Copia il numero e incollalo qui sotto',
+              style: TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _verifyConnectionWithBot() async {
+    if (_chatIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Aggiungi almeno un Chat ID prima di verificare la connessione'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final token = _tokenController.text;
+    bool hasError = false;
+
+    for (String chatId in _chatIds) {
       try {
         final response = await http.get(
           Uri.parse(
-              'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=Verifica connessione al bot'),
+              'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=Test di connessione: La connessione al bot è attiva!'
+          ),
         );
 
-        if (response.statusCode == 200) {
-          print('Connessione verificata con successo');
-        } else {
-          print('Errore nell\'invio del messaggio di verifica: ${response.body}');
+        if (response.statusCode != 200) {
+          hasError = true;
+          print('Errore nell\'invio del messaggio di verifica a $chatId: ${response.body}');
         }
       } catch (e) {
-        print('Errore nella comunicazione con Telegram: $e');
+        hasError = true;
+        print('Errore nella comunicazione con Telegram per $chatId: $e');
       }
     }
+
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            hasError
+                ? 'Errore nella verifica della connessione. Controlla il token e i Chat ID.'
+                : 'Connessione verificata con successo! Controlla Telegram.'
+        ),
+        backgroundColor: hasError ? Colors.red : Colors.green,
+      ),
+    );
   }
 
   @override
@@ -405,7 +475,7 @@ class _SettingsPageState extends State<SettingsPage> {
       appBar: AppBar(
         title: Text('Impostazioni'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
@@ -427,40 +497,66 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
               ),
               SizedBox(height: 16),
-              TextFormField(
-                controller: _chatIdController,
-                decoration: InputDecoration(
-                  labelText: 'Chat ID',
-                  hintText: 'Inserisci il chat ID',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Per favore inserisci il chat ID';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _saveSettings,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'Salva Impostazioni',
-                    style: TextStyle(fontSize: 16),
+              _buildInstructions(),
+              SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _newChatIdController,
+                      decoration: InputDecoration(
+                        labelText: 'Nuovo Chat ID',
+                        hintText: 'Inserisci il chat ID ottenuto dal bot',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
                   ),
-                ),
+                  IconButton(
+                    icon: Icon(Icons.add),
+                    onPressed: _addChatId,
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Text('Chat ID Registrati:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                itemCount: _chatIds.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text(_chatIds[index]),
+                    trailing: IconButton(
+                      icon: Icon(Icons.delete),
+                      onPressed: () => _removeChatId(_chatIds[index]),
+                    ),
+                  );
+                },
               ),
               SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _verifyConnectionWithBot,
-                child: Padding(
+                onPressed: _saveSettings,
+                style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'Verifica Connessione con Bot',
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  backgroundColor: Colors.blue,
+                ),
+                child: Text(
+                  'Salva Impostazioni',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
+              ),
+              SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _verifyConnectionWithBot,
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: Colors.green,
+                ),
+                child: Text(
+                  'Verifica Connessione Bot',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
               ),
             ],
@@ -473,7 +569,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _tokenController.dispose();
-    _chatIdController.dispose();
+    _newChatIdController.dispose();
     super.dispose();
   }
 }
