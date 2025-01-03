@@ -18,11 +18,11 @@ Il sistema rileva una possibile caduta analizzando i dati del sensore e confront
 ## Tecnologie
 - C/C++
 - Flutter
+- Python
 ## Componenti hardware
 - Arduino nano 33 BLE sese rev 2
 - LiPo battery 3.7v
 ## Riferimenti
-
 - Wang FT, Chan HL, Hsu MH, Lin CK, Chao PK, Chang YJ. Threshold-based fall detection using a hybrid of tri-axial accelerometer and gyroscope. Physiol Meas. 2018 Oct 11;39(10):105002. doi: 10.1088/1361-6579/aae0eb. PMID: 30207983. (https://pubmed.ncbi.nlm.nih.gov/30207983/)
 
 ## Componenti
