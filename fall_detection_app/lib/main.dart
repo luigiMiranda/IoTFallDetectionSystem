@@ -16,6 +16,7 @@ class FallDetectionApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      debugShowCheckedModeBanner: false,
       home: BluetoothScanPage(),
     );
   }
@@ -173,13 +174,28 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('telegram_token');
     final chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
+    final userName = prefs.getString('user_name') ?? '';
+
+    // Ottieni l'orario corrente
+    final now = DateTime.now();
+    final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final formattedDate = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}";
+
+    final message = userName.isNotEmpty
+        ? 'ATTENZIONE: È stata rilevata una possibile caduta di $userName!\n'
+        'Data e ora: $formattedDate alle $formattedTime'
+        : 'ATTENZIONE: È stata rilevata una possibile caduta!\n'
+        'Data e ora: $formattedDate alle $formattedTime';
 
     if (token != null && chatIds.isNotEmpty) {
       for (String chatId in chatIds) {
         try {
+          // Codifica il messaggio per l'URL
+          final encodedMessage = Uri.encodeComponent(message);
+
           final response = await http.get(
             Uri.parse(
-                'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=ATTENZIONE: È stata rilevata una possibile caduta!'
+                'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=$encodedMessage'
             ),
           );
 
@@ -197,7 +213,7 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('CADUTA RILEVATA!'),
-          content: Text('È stata rilevata una possibile caduta. Verificare lo stato della persona.'),
+          content: Text(message),
           actions: <Widget>[
             TextButton(
               child: Text('OK'),
@@ -210,6 +226,7 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
       },
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -332,6 +349,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _tokenController;
   late TextEditingController _newChatIdController;
+  late TextEditingController _userNameController;
   List<String> _chatIds = [];
   bool _isLoading = true;
 
@@ -340,6 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _tokenController = TextEditingController();
     _newChatIdController = TextEditingController();
+    _userNameController = TextEditingController();
     _loadSettings();
   }
 
@@ -347,6 +366,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _tokenController.text = prefs.getString('telegram_token') ?? '';
+      _userNameController.text = prefs.getString('user_name') ?? '';
       _chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
       _isLoading = false;
     });
@@ -358,6 +378,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('telegram_token', _tokenController.text);
+      await prefs.setString('user_name', _userNameController.text);
       await prefs.setStringList('telegram_chat_ids', _chatIds);
 
       setState(() => _isLoading = false);
@@ -428,13 +449,18 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _isLoading = true);
 
     final token = _tokenController.text;
+    final userName = _userNameController.text;
     bool hasError = false;
 
     for (String chatId in _chatIds) {
       try {
+        final message = userName.isNotEmpty
+            ? 'Test di connessione per il dispositivo di $userName: La connessione al bot è attiva!'
+            : 'Test di connessione: La connessione al bot è attiva!';
+
         final response = await http.get(
           Uri.parse(
-              'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=Test di connessione: La connessione al bot è attiva!'
+              'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=$message'
           ),
         );
 
@@ -472,97 +498,112 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+        appBar: AppBar(
         title: Text('Impostazioni'),
+    ),
+    body: SingleChildScrollView(
+    padding: EdgeInsets.all(16.0),
+    child: Form(
+    key: _formKey,
+    child: Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+    TextFormField(
+    controller: _userNameController,
+    decoration: InputDecoration(
+    labelText: 'Nome Utente',
+    hintText: 'Inserisci il nome di chi indossa il dispositivo',
+    border: OutlineInputBorder(),
+    ),
+    validator: (value) {
+    if (value == null || value.isEmpty) {
+    return 'Per favore inserisci il nome';
+    }
+    return null;
+    },
+    ),
+    SizedBox(height: 16),
+    TextFormField(
+    controller: _tokenController,
+    decoration: InputDecoration(
+    labelText: 'Token Bot Telegram',
+    hintText: 'Inserisci il token del tuo bot',
+    border: OutlineInputBorder(),
+    ),
+    validator: (value) {
+    if (value == null || value.isEmpty) {
+    return 'Per favore inserisci il token';
+    }
+    return null;
+    },
+    ),
+    SizedBox(height: 16),
+    _buildInstructions(),
+    SizedBox(height: 16),
+    Row(
+    children: [
+    Expanded(
+    child: TextFormField(
+    controller: _newChatIdController,
+    decoration: InputDecoration(
+    labelText: 'Nuovo Chat ID',
+    hintText: 'Inserisci il chat ID ottenuto dal bot',
+    border: OutlineInputBorder(),
+    ),
+    keyboardType: TextInputType.number,
+    ),
+    ),
+    IconButton(
+    icon: Icon(Icons.add),
+      onPressed: _addChatId,
+    ),
+    ],
+    ),
+      SizedBox(height: 16),
+      Text('Chat ID Registrati:',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      ListView.builder(
+        shrinkWrap: true,
+        physics: NeverScrollableScrollPhysics(),
+        itemCount: _chatIds.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(_chatIds[index]),
+            trailing: IconButton(
+              icon: Icon(Icons.delete),
+              onPressed: () => _removeChatId(_chatIds[index]),
+            ),
+          );
+        },
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _tokenController,
-                decoration: InputDecoration(
-                  labelText: 'Token Bot Telegram',
-                  hintText: 'Inserisci il token del tuo bot',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Per favore inserisci il token';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 16),
-              _buildInstructions(),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _newChatIdController,
-                      decoration: InputDecoration(
-                        labelText: 'Nuovo Chat ID',
-                        hintText: 'Inserisci il chat ID ottenuto dal bot',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.add),
-                    onPressed: _addChatId,
-                  ),
-                ],
-              ),
-              SizedBox(height: 16),
-              Text('Chat ID Registrati:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: _chatIds.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    title: Text(_chatIds[index]),
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete),
-                      onPressed: () => _removeChatId(_chatIds[index]),
-                    ),
-                  );
-                },
-              ),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _saveSettings,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: Colors.blue,
-                ),
-                child: Text(
-                  'Salva Impostazioni',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
-              SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: _verifyConnectionWithBot,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  backgroundColor: Colors.green,
-                ),
-                child: Text(
-                  'Verifica Connessione Bot',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
+      SizedBox(height: 16),
+      ElevatedButton(
+        onPressed: _saveSettings,
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          backgroundColor: Colors.blue,
+        ),
+        child: Text(
+          'Salva Impostazioni',
+          style: TextStyle(fontSize: 16, color: Colors.white),
         ),
       ),
+      SizedBox(height: 8),
+      ElevatedButton(
+        onPressed: _verifyConnectionWithBot,
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          backgroundColor: Colors.green,
+        ),
+        child: Text(
+          'Verifica Connessione Bot',
+          style: TextStyle(fontSize: 16, color: Colors.white),
+        ),
+      ),
+    ],
+    ),
+    ),
+    ),
     );
   }
 
@@ -570,6 +611,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _tokenController.dispose();
     _newChatIdController.dispose();
+    _userNameController.dispose();
     super.dispose();
   }
 }
