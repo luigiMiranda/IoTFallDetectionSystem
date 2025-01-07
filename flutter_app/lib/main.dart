@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
@@ -28,23 +30,54 @@ class BluetoothScanPage extends StatefulWidget {
 }
 
 class _BluetoothScanPageState extends State<BluetoothScanPage> {
+
+
   List<ScanResult> _scanResults = [];
   bool _isScanning = false;
   BluetoothDevice? _connectedDevice;
 
-  // UUID del servizio dall'Arduino
   final String _serviceUUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
   final String _fallDetectedCharUUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
 
   @override
   void initState() {
     super.initState();
-    // Inizializza lo stato del Bluetooth
+    _requestPermissions();
     FlutterBluePlus.isSupported.then((isAvailable) {
       if (!isAvailable) {
         _showBluetoothUnavailableDialog();
       }
     });
+  }
+
+  Future<void> _requestPermissions() async {
+    await Permission.locationWhenInUse.request();
+    await Permission.location.request();
+
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      _showLocationServicesDialog();
+    }
+  }
+
+  void _showLocationServicesDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Servizi di Localizzazione'),
+          content: Text('Per favore attiva i servizi di localizzazione per permettere il rilevamento della posizione in caso di caduta.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Geolocator.openLocationSettings();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showBluetoothUnavailableDialog() {
@@ -68,7 +101,6 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
   }
 
   void _startBluetoothScan() async {
-    // Abilita Bluetooth se non è già acceso
     await FlutterBluePlus.turnOn();
 
     setState(() {
@@ -76,20 +108,17 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
       _scanResults.clear();
     });
 
-    // Avvia la scansione
     await FlutterBluePlus.startScan(
       timeout: Duration(seconds: 10),
       androidUsesFineLocation: true,
     );
 
-    // Ascolta i risultati della scansione
     FlutterBluePlus.scanResults.listen((results) {
       setState(() {
         _scanResults = results;
       });
     });
 
-    // Quando la scansione è completata
     FlutterBluePlus.isScanning.listen((isScanning) {
       setState(() {
         _isScanning = isScanning;
@@ -97,33 +126,49 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     });
   }
 
+  Future<Position?> _getCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      print('Error getting location: $e');
+      return null;
+    }
+  }
+
   void _connectToDevice(ScanResult result) async {
-    // Ferma la scansione se è ancora in corso
     await FlutterBluePlus.stopScan();
 
     try {
-      // Connetti al dispositivo
       await result.device.connect(
         autoConnect: false,
         timeout: Duration(seconds: 15),
       );
 
-      // Scopri i servizi
       List<BluetoothService> services = await result.device.discoverServices();
 
-      // Cerca il servizio specifico
       for (BluetoothService service in services) {
         if (service.uuid.toString().toUpperCase() == _serviceUUID.toUpperCase()) {
-          // Trova la caratteristica di rilevamento cadute
           for (BluetoothCharacteristic characteristic in service.characteristics) {
             if (characteristic.uuid.toString().toUpperCase() == _fallDetectedCharUUID.toUpperCase()) {
-              // Abilita le notifiche
               await characteristic.setNotifyValue(true);
 
-              // Ascolta i valori
               characteristic.lastValueStream.listen((value) {
-                if (value.isNotEmpty && value[0] == 49) { // ASCII '1'
-                  _showFallAlert();
+                if (value.isNotEmpty && value[0] == 49) {
+                  _handleFallDetection(); // Replace _showFallAlert() with this
                 }
               });
             }
@@ -132,7 +177,6 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
         }
       }
 
-      // Naviga alla pagina di rilevamento cadute
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -170,62 +214,83 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     );
   }
 
-  Future<void> _showFallAlert() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('telegram_token');
-    final chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
-    final userName = prefs.getString('user_name') ?? '';
+  // Replace the _showFallAlert() function with these two separate functions:
 
-    // Ottieni l'orario corrente
-    final now = DateTime.now();
-    final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-    final formattedDate = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}";
+  Future<void> _handleFallDetection() async {
+    _showInAppAlert();
+    await _sendTelegramAlert();
+  }
 
-    final message = userName.isNotEmpty
-        ? 'ATTENZIONE: È stata rilevata una possibile caduta di $userName!\n'
-        'Data e ora: $formattedDate alle $formattedTime'
-        : 'ATTENZIONE: È stata rilevata una possibile caduta!\n'
-        'Data e ora: $formattedDate alle $formattedTime';
-
-    if (token != null && chatIds.isNotEmpty) {
-      for (String chatId in chatIds) {
-        try {
-          // Codifica il messaggio per l'URL
-          final encodedMessage = Uri.encodeComponent(message);
-
-          final response = await http.get(
-            Uri.parse(
-                'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=$encodedMessage'
-            ),
-          );
-
-          if (response.statusCode != 200) {
-            print('Errore nell\'invio del messaggio Telegram a $chatId: ${response.body}');
-          }
-        } catch (e) {
-          print('Errore nella comunicazione con Telegram per $chatId: $e');
-        }
-      }
-    }
-
+  void _showInAppAlert() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('CADUTA RILEVATA!'),
-          content: Text(message),
+          content: Text('È stata rilevata una possibile caduta. Un messaggio di allerta è stato inviato ai contatti di emergenza.'),
           actions: <Widget>[
             TextButton(
               child: Text('OK'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ],
         );
       },
     );
   }
+
+  Future<void> _sendTelegramAlert() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('telegram_token');
+    final chatIds = prefs.getStringList('telegram_chat_ids') ?? [];
+    final userName = prefs.getString('user_name') ?? '';
+
+    final now = DateTime.now();
+    final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final formattedDate = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}";
+
+    Position? position = await _getCurrentLocation();
+    String locationInfo = '';
+    String mapsLink = '';
+
+    if (position != null) {
+      locationInfo = '\nPosizione: ${position.latitude}, ${position.longitude}';
+      mapsLink = '\nMappa: https://www.google.com/maps?q=${position.latitude},${position.longitude}';
+    } else {
+      locationInfo = '\nPosizione: Non disponibile';
+    }
+
+    final message = userName.isNotEmpty
+        ? 'ATTENZIONE: È stata rilevata una possibile caduta di $userName!\n'
+        'Data e ora: $formattedDate alle $formattedTime$locationInfo$mapsLink'
+        : 'ATTENZIONE: È stata rilevata una possibile caduta!\n'
+        'Data e ora: $formattedDate alle $formattedTime$locationInfo$mapsLink';
+
+    if (token != null && chatIds.isNotEmpty) {
+      for (String chatId in chatIds) {
+        try {
+          final encodedMessage = Uri.encodeComponent(message);
+          final response = await http.get(
+            Uri.parse(
+                'https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=$encodedMessage'
+            ),
+          );
+
+          if (position != null) {
+            await http.get(
+              Uri.parse(
+                  'https://api.telegram.org/bot$token/sendLocation?chat_id=$chatId&latitude=${position.latitude}&longitude=${position.longitude}'
+              ),
+            );
+          }
+        } catch (e) {
+          print('Errore nella comunicazione con Telegram per $chatId: $e');
+        }
+      }
+    }
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
