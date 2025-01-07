@@ -214,7 +214,7 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     );
   }
 
-  // Replace the _showFallAlert() function with these two separate functions:
+
 
   Future<void> _handleFallDetection() async {
     _showInAppAlert();
