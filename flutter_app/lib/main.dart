@@ -217,13 +217,18 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
 
 
   Future<void> _handleFallDetection() async {
+    // Avviamo l'invio del messaggio Telegram immediatamente
+    _sendTelegramAlert();  // Non aspettiamo che finisca
+
+    // Mostriamo l'alert nell'app
     _showInAppAlert();
-    await _sendTelegramAlert();
   }
 
-  void _showInAppAlert() {
+// Modifica anche questa funzione per restituire un Future
+  Future<void> _showInAppAlert() async {
     showDialog(
       context: context,
+      barrierDismissible: true, // Permette di chiudere l'alert toccando fuori
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('CADUTA RILEVATA!'),
