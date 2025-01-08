@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:workmanager/workmanager.dart';
 
-void main() {
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    return Future.value(true);
+  });
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Workmanager().initialize(callbackDispatcher);
+  await Workmanager().registerPeriodicTask(
+    "fallDetectionTask",
+    "fallDetectionMonitoring",
+    frequency: Duration(minutes: 15),
+    constraints: Constraints(
+      networkType: NetworkType.connected,
+    ),
+  );
   runApp(FallDetectionApp());
 }
+
 
 class FallDetectionApp extends StatelessWidget {
   @override
@@ -29,12 +48,11 @@ class BluetoothScanPage extends StatefulWidget {
   _BluetoothScanPageState createState() => _BluetoothScanPageState();
 }
 
-class _BluetoothScanPageState extends State<BluetoothScanPage> {
-
-
+class _BluetoothScanPageState extends State<BluetoothScanPage> with WidgetsBindingObserver {
   List<ScanResult> _scanResults = [];
   bool _isScanning = false;
   BluetoothDevice? _connectedDevice;
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   final String _serviceUUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
   final String _fallDetectedCharUUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
@@ -42,12 +60,49 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initializeNotifications();
     _requestPermissions();
     FlutterBluePlus.isSupported.then((isAvailable) {
       if (!isAvailable) {
         _showBluetoothUnavailableDialog();
       }
     });
+  }
+
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+    AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    final InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused) {
+      _startBackgroundService();
+    }
+  }
+
+  void _startBackgroundService() async {
+    if (_connectedDevice != null) {
+      await Workmanager().registerPeriodicTask(
+        "fallDetectionTask",
+        "fallDetectionMonitoring",
+        frequency: Duration(minutes: 15),
+        inputData: {
+          'deviceId': _connectedDevice!.remoteId.toString(),
+        },
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+        ),
+      );
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -168,7 +223,7 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
 
               characteristic.lastValueStream.listen((value) {
                 if (value.isNotEmpty && value[0] == 49) {
-                  _handleFallDetection(); // Replace _showFallAlert() with this
+                  _handleFallDetection();
                 }
               });
             }
@@ -214,11 +269,30 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     );
   }
 
-
-
   Future<void> _handleFallDetection() async {
     _showInAppAlert();
+    _showLocalNotification();
     await _sendTelegramAlert();
+  }
+
+  Future<void> _showLocalNotification() async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+    AndroidNotificationDetails(
+      'fall_detection_channel',
+      'Fall Detection',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails platformChannelSpecifics =
+    NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      'CADUTA RILEVATA!',
+      'È stata rilevata una possibile caduta.',
+      platformChannelSpecifics,
+    );
   }
 
   void _showInAppAlert() {
@@ -290,8 +364,6 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -346,6 +418,12 @@ class _BluetoothScanPageState extends State<BluetoothScanPage> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 }
 
