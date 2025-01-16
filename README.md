@@ -43,7 +43,7 @@ Il sistema rileva una possibile caduta analizzando i dati del sensore e confront
 
 ## Video
 
-[Guarda il video](https://youtube.com/shorts/tuvCDoVMxR8?feature=share)
+[Guarda il video](https://youtube.com/shorts/DtKSb3FxIOU)
 
 
 
