@@ -33,8 +33,9 @@ Il sistema rileva una possibile caduta analizzando i dati del sensore e confront
 [Documentation](app-demonstration.mp4)
 
 
-## Screenshots
+## Video
 
-[Guarda il video](media/tuovideo.mp4)
+[Guarda il video](https://www.youtube.com/shorts/Gr3AHbOsRD0)
+
 
 
