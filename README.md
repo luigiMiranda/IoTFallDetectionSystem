@@ -4,7 +4,6 @@
 * [Descrizione progetto](#descrizione)
 * [Tecnologie](#tecnologie)
 * [Componenti hardware](#hardware)
-* [Setup](#setup)
 ## Descrizione progetto
 Questo progetto implementa un sistema wearable per il rilevamento di cadute, pensato principalmente per persone anziane sopra i 65 anni. Il sistema sfrutta:
 
