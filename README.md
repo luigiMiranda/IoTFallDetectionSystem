@@ -12,6 +12,10 @@ Ecco il prototipo del dispositivo di rilevamento cadute in azione:
 * [Descrizione progetto](#descrizione)
 * [Tecnologie](#tecnologie)
 * [Componenti hardware](#hardware)
+* [Riferimenti](#riferimenti)
+* [Screenshots app](#screenshots-app)
+* [Video](#video)
+
 ## Descrizione progetto
 Questo progetto implementa un sistema wearable per il rilevamento di cadute, pensato principalmente per persone anziane sopra i 65 anni. Il sistema sfrutta:
 
