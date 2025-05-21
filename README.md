@@ -30,9 +30,6 @@ Il sistema rileva una possibile caduta analizzando i dati del sensore e confront
 <img src="images/home.jpg" alt="Screenshot" width="300" />
 <img src="images/scanning.jpg" alt="Screenshot" width="300" />
 <img src="images/connection.jpg" alt="Screenshot" width="300" />
-<img src="images/fall-detected.jpg" alt="Screenshot" width="300" />
-<img src="images/alert-bot.jpg" alt="Screenshot" width="300" />
-
 
 ## Video
 
