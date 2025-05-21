@@ -1,5 +1,13 @@
-
 # Sistema di Rilevamento Cadute con Arduino Nano 33 BLE e App Flutter
+
+## Anteprima del Dispositivo
+Ecco il prototipo del dispositivo di rilevamento cadute in azione:
+
+<p align="center">
+  <img src="images/collageiotfalldetection.jpg" alt="Collage del dispositivo di rilevamento cadute" width="700"/>
+</p>
+<em><p align="center">Il dispositivo assemblato: Arduino Nano 33 BLE Sense Rev2 alimentato da batteria LiPo.</p></em>
+
 ## Table of Contents
 * [Descrizione progetto](#descrizione)
 * [Tecnologie](#tecnologie)
